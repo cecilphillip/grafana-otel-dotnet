@@ -1,0 +1,11 @@
+*           text=auto encoding=UTF-8
+
+*.jpg  	    binary
+*.png 	    binary
+*.gif 	    binary
+
+*.cs        text=auto diff=csharp
+*.js        text=auto
+*.sh        text eol=lf
+*.csproj    text=auto
+*.sln       text merge=union eol=crlf
