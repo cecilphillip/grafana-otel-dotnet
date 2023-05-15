@@ -1,0 +1,49 @@
+auth_enabled: false
+
+server:
+  http_listen_address: 0.0.0.0
+  grpc_listen_address: 0.0.0.0
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+memberlist:
+  join_members:
+    - loki:7946
+
+common:
+  storage:
+    s3:
+      endpoint: minio:9000
+      insecure: true
+      bucketnames: loki-data
+      access_key_id: loki
+      secret_access_key: supersecret
+      s3forcepathstyle: true
+  # storage:
+  #   filesystem:
+  #     chunks_directory: /loki/chunks
+  #     rules_directory: /loki/rules
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: memberlist
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: boltdb-shipper
+      object_store: s3
+      #object_store: filesystem
+      schema: v11
+      index:
+        prefix: index_
+        period: 24h
+
+ruler:
+  alertmanager_url: http://localhost:9093
+
+# Grafana Labs Reporting
+analytics:
+  reporting_enabled: false

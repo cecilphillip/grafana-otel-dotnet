@@ -1,0 +1,38 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+      grpc:
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+exporters:
+  prometheus: # metrics
+    endpoint: "0.0.0.0:8889"
+    namespace: demo
+    send_timestamps: true
+    resource_to_telemetry_conversion:
+      enabled: true
+    const_labels:
+      exported: "collector"
+  
+  otlp:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+    
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp]  
