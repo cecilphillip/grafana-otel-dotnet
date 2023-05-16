@@ -26,18 +26,18 @@ Log.Logger = new LoggerConfiguration()
             new() { Key = "runtime", Value = "dotnet" }
         },
         period: TimeSpan.FromSeconds(1),
-        //textFormatter: formatter,
-        propertiesAsLabels: new[] { "EnvironmentName", "MachineName", "Level" })
+        textFormatter: formatter,
+        propertiesAsLabels: new[] { "EnvironmentName", "MachineName", "level" })
     .CreateLogger();
 
 builder.Host.UseSerilog();
-
+builder.Services.AddSingleton<Instrumentor>();
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracerProviderBuilder =>
         tracerProviderBuilder
-            .AddSource(DiagnosticsConfig.ActivitySource.Name)
+            .AddSource(Instrumentor.ServiceName)
             .ConfigureResource(resource => resource
-                .AddService(DiagnosticsConfig.ServiceName))
+                .AddService(Instrumentor.ServiceName))
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation(opts =>
             {
@@ -50,8 +50,10 @@ builder.Services.AddOpenTelemetry()
             .AddOtlpExporter())
     .WithMetrics(metricsProviderBuilder =>
         metricsProviderBuilder
+            .AddMeter(Instrumentor.ServiceName)
             .ConfigureResource(resource => resource
-                .AddService(DiagnosticsConfig.ServiceName))
+                .AddService(Instrumentor.ServiceName))
+            .AddRuntimeInstrumentation()
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation().AddOtlpExporter());
 

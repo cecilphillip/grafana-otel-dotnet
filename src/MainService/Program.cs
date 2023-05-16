@@ -1,6 +1,5 @@
 using MainSerivce.Data;
 using MainService;
-using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -28,25 +27,25 @@ Log.Logger = new LoggerConfiguration()
             new() { Key = "runtime", Value = "dotnet" }
         },
         period: TimeSpan.FromSeconds(1),
-        //textFormatter: formatter,
-        propertiesAsLabels: new[] { "EnvironmentName", "MachineName", "Level" })
+        textFormatter: formatter,
+        propertiesAsLabels: new[] { "EnvironmentName", "MachineName", "level" })
     .CreateLogger();
 
 builder.Host.UseSerilog();
-
+builder.Services.AddSingleton<Instrumentor>();
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracerProviderBuilder =>
         tracerProviderBuilder
-            .AddSource(DiagnosticsConfig.ActivitySource.Name)
+            .AddSource(Instrumentor.ServiceName)
             .ConfigureResource(resource => resource
-                .AddService(DiagnosticsConfig.ServiceName))
+                .AddService(Instrumentor.ServiceName))
             .AddAspNetCoreInstrumentation(opts =>
             {
                 opts.Filter = ctx =>
                 {
                     var ignore = new[]
                     {
-                        "/_blazor","/_framework", 
+                        "/_blazor", "/_framework",
                         "/css", "/swagger", "/favicon"
                     };
                     return !ignore.Any(s => ctx.Request.Path.Value!.Contains(s));
@@ -64,8 +63,10 @@ builder.Services.AddOpenTelemetry()
             .AddOtlpExporter())
     .WithMetrics(metricsProviderBuilder =>
         metricsProviderBuilder
+            .AddMeter(Instrumentor.ServiceName)
             .ConfigureResource(resource => resource
-                .AddService(DiagnosticsConfig.ServiceName))
+                .AddService(Instrumentor.ServiceName))
+            .AddRuntimeInstrumentation()
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation().AddOtlpExporter());
 
