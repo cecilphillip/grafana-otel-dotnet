@@ -70,13 +70,13 @@ services:
       - MINIO_PROMETHEUS_AUTH_TYPE=public
       - MINIO_UPDATE=off
     ports:
-      - 9000
+      - "9000"
     volumes:
       - ./tmp/minio/data/:/data/
   
   otel-collector:
     container_name: otelcollector
-    image: otel/opentelemetry-collector-contrib:0.73.0
+    image: otel/opentelemetry-collector-contrib:latest
     command: [ --config=/etc/otel-collector-config.yml ]
     volumes:
       - ./otel-collector-config.yml:/etc/otel-collector-config.yml

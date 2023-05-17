@@ -5,6 +5,14 @@ receivers:
       grpc:
 
 processors:
+  resource:
+    attributes:
+      - action: insert
+        key: loki.format
+        value: raw
+      - action: insert
+        key: loki.resource.labels
+        value: app, runtime
   batch:
     timeout: 1s
     send_batch_size: 1024
@@ -19,8 +27,13 @@ exporters:
     const_labels:
       exported: "collector"
   
-  otlp:
+  otlp/tempo:
     endpoint: tempo:4317
+    tls:
+      insecure: true
+  
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
     tls:
       insecure: true
 
@@ -28,11 +41,16 @@ service:
   pipelines:
     
     metrics:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [prometheus]
+      receivers: [ otlp ]
+      processors: [ batch ]
+      exporters: [ prometheus ]
     
     traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp]  
+      receivers: [ otlp ]
+      processors: [ batch ]
+      exporters: [ otlp/tempo ]
+    
+    logs:
+      receivers: [ otlp ]
+      processors: [ batch, resource ]
+      exporters: [ loki ]
