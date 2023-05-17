@@ -4,15 +4,12 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
-using Serilog.Formatting.Display;
-using Serilog.Sinks.Grafana.Loki;
 
 var builder = WebApplication.CreateBuilder(args);
 
 const string outputTemplate =
     "[{Level:w}]: {Timestamp:dd-MM-yyyy:HH:mm:ss} {MachineName} {EnvironmentName} {SourceContext} {Message}{NewLine}{Exception}";
 
-var formatter = new MessageTemplateTextFormatter(outputTemplate);
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .Enrich.FromLogContext()
@@ -20,18 +17,19 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.WithEnvironmentName()
     .Enrich.WithMachineName()
     .WriteTo.Console(outputTemplate: outputTemplate)
-    .WriteTo.GrafanaLoki("http://localhost:3100",
-        new List<LokiLabel>
+    .WriteTo.OpenTelemetry(opts =>
+    {
+        opts.ResourceAttributes = new Dictionary<string, object>
         {
-            new() { Key = "app", Value = "web" },
-            new() { Key = "runtime", Value = "dotnet" }
-        },
-        period: TimeSpan.FromSeconds(1),
-        textFormatter: formatter,
-        propertiesAsLabels: new[] { "EnvironmentName", "MachineName", "level" })
+            ["app"] = "web",
+            ["runtime"] = "dotnet",
+            ["service.name"] = "MainService"
+        };
+    })
     .CreateLogger();
 
 builder.Host.UseSerilog();
+
 builder.Services.AddSingleton<Instrumentor>();
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracerProviderBuilder =>
@@ -45,8 +43,8 @@ builder.Services.AddOpenTelemetry()
                 {
                     var ignore = new[]
                     {
-                        "/_blazor", "/_framework",
-                        "/css", "/swagger", "/favicon"
+                        "/_blazor", "/_framework", ".css",
+                        "/css", "/favicon"
                     };
                     return !ignore.Any(s => ctx.Request.Path.Value!.Contains(s));
                 };

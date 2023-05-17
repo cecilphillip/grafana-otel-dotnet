@@ -3,15 +3,12 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
-using Serilog.Formatting.Display;
-using Serilog.Sinks.Grafana.Loki;
 
 var builder = WebApplication.CreateBuilder(args);
 
 const string outputTemplate =
     "[{Level:w}]: {Timestamp:dd-MM-yyyy:HH:mm:ss} {MachineName} {EnvironmentName} {SourceContext} {Message}{NewLine}{Exception}";
 
-var formatter = new MessageTemplateTextFormatter(outputTemplate);
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .Enrich.FromLogContext()
@@ -19,18 +16,19 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.WithEnvironmentName()
     .Enrich.WithMachineName()
     .WriteTo.Console(outputTemplate: outputTemplate)
-    .WriteTo.GrafanaLoki("http://localhost:3100",
-        new List<LokiLabel>
+    .WriteTo.OpenTelemetry(opts =>
+    {
+        opts.ResourceAttributes = new Dictionary<string, object>
         {
-            new() { Key = "app", Value = "webapi" },
-            new() { Key = "runtime", Value = "dotnet" }
-        },
-        period: TimeSpan.FromSeconds(1),
-        textFormatter: formatter,
-        propertiesAsLabels: new[] { "EnvironmentName", "MachineName", "level" })
+            ["app"] = "webapi",
+            ["runtime"] = "dotnet",
+            ["service.name"] = "BackendApiService"
+        };
+    })
     .CreateLogger();
 
 builder.Host.UseSerilog();
+
 builder.Services.AddSingleton<Instrumentor>();
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracerProviderBuilder =>
@@ -63,7 +61,6 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
