@@ -5,14 +5,18 @@ receivers:
       grpc:
 
 processors:
-  resource:
+  resource: # Resource spec https://opentelemetry.io/docs/specs/semconv/resource/
     attributes:
+      - action: insert
+        key: loki.tenant
+        value: host.name
       - action: insert
         key: loki.format
         value: raw
       - action: insert
         key: loki.resource.labels
-        value: app, runtime
+        value: service.name, service.namespace, service.instance.id, host.name
+  
   batch:
     timeout: 1s
     send_batch_size: 1024
@@ -39,7 +43,6 @@ exporters:
 
 service:
   pipelines:
-    
     metrics:
       receivers: [ otlp ]
       processors: [ batch ]
