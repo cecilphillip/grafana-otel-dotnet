@@ -3,6 +3,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
+using Serilog.Sinks.OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,11 +19,12 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(outputTemplate: outputTemplate)
     .WriteTo.OpenTelemetry(opts =>
     {
+        opts.IncludedData = IncludedData.SpecRequiredResourceAttributes;
         opts.ResourceAttributes = new Dictionary<string, object>
         {
             ["app"] = "webapi",
             ["runtime"] = "dotnet",
-            ["service.name"] = "BackendApiService"
+            ["service.name"] = Instrumentor.ServiceName
         };
     })
     .CreateLogger();
@@ -31,12 +33,19 @@ builder.Host.UseSerilog();
 
 builder.Services.AddSingleton<Instrumentor>();
 builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource
+        .AddService(Instrumentor.ServiceName))
     .WithTracing(tracerProviderBuilder =>
         tracerProviderBuilder
             .AddSource(Instrumentor.ServiceName)
-            .ConfigureResource(resource => resource
-                .AddService(Instrumentor.ServiceName))
-            .AddAspNetCoreInstrumentation()
+            .AddAspNetCoreInstrumentation(opts =>
+            {
+                opts.Filter = context =>
+                {
+                    var ignore = new[] { "/swagger" };
+                    return !ignore.Any(s => context.Request.Path.ToString().Contains(s));
+                };
+            })
             .AddHttpClientInstrumentation(opts =>
             {
                 opts.FilterHttpRequestMessage = req =>
@@ -49,8 +58,6 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metricsProviderBuilder =>
         metricsProviderBuilder
             .AddMeter(Instrumentor.ServiceName)
-            .ConfigureResource(resource => resource
-                .AddService(Instrumentor.ServiceName))
             .AddRuntimeInstrumentation()
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation().AddOtlpExporter());

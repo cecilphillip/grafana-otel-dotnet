@@ -4,6 +4,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
+using Serilog.Sinks.OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +20,7 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(outputTemplate: outputTemplate)
     .WriteTo.OpenTelemetry(opts =>
     {
+        opts.IncludedData = IncludedData.SpecRequiredResourceAttributes;
         opts.ResourceAttributes = new Dictionary<string, object>
         {
             ["app"] = "web",
@@ -32,11 +34,11 @@ builder.Host.UseSerilog();
 
 builder.Services.AddSingleton<Instrumentor>();
 builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource
+        .AddService(Instrumentor.ServiceName))
     .WithTracing(tracerProviderBuilder =>
         tracerProviderBuilder
             .AddSource(Instrumentor.ServiceName)
-            .ConfigureResource(resource => resource
-                .AddService(Instrumentor.ServiceName))
             .AddAspNetCoreInstrumentation(opts =>
             {
                 opts.Filter = ctx =>
@@ -62,8 +64,6 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metricsProviderBuilder =>
         metricsProviderBuilder
             .AddMeter(Instrumentor.ServiceName)
-            .ConfigureResource(resource => resource
-                .AddService(Instrumentor.ServiceName))
             .AddRuntimeInstrumentation()
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation().AddOtlpExporter());

@@ -9,4 +9,8 @@ scrape_configs:
   
   - job_name: 'otelcollector'
     static_configs:
-      - targets: [ 'otelcollector:8889' ]
+      - targets: [ 'otelcollector:8888' ]
+
+  - job_name: 'appmetrics'
+    static_configs:
+      - targets: [ 'otelcollector:8889' ]        

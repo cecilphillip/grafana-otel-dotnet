@@ -8,14 +8,11 @@ processors:
   resource: # Resource spec https://opentelemetry.io/docs/specs/semconv/resource/
     attributes:
       - action: insert
-        key: loki.tenant
-        value: host.name
-      - action: insert
         key: loki.format
         value: raw
       - action: insert
         key: loki.resource.labels
-        value: service.name, service.namespace, service.instance.id, host.name
+        value: service.name, app, runtime
   
   batch:
     timeout: 1s
