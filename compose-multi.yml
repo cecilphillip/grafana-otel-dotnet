@@ -1,0 +1,80 @@
+version: "3.8"
+name: grafana-otel
+
+services:
+  loki:
+    image: grafana/loki:2.9.2
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./tmp/loki:/loki/
+      - ./.config/loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+
+  tempo:
+    image: grafana/tempo:2.3.1
+    container_name: tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./.config/tempo.yaml:/etc/tempo.yaml
+      - ./tmp/tempo:/tmp/tempo
+  #    ports:
+  #      - "14268:14268" # jaeger ui
+  #      - "3200:3200"   # tempo      
+  #      - "4317:4317"  # otlp grpc
+  #      - "4318:4318"  # otlp http
+  
+  prometheus:
+    image: prom/prometheus:v2.44.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-remote-write-receiver'
+      - '--enable-feature=exemplar-storage'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./.config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./tmp/prometheus:/prometheus
+
+  grafana:
+    image: grafana/grafana:9.5.2
+    container_name: grafana
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./tmp/grafana/:/var/lib/grafana/
+      - ./.config/ds.yaml:/etc/grafana/provisioning/datasources/ds.yaml
+    ports:
+      - "3000:3000"
+  
+  otel-collector:
+    container_name: otelcollector
+    image: otel/opentelemetry-collector-contrib:latest
+    command: [ --config=/etc/otel-collector-config.yml ]
+    volumes:
+      - ./.config/otel-collector-config.yml:/etc/otel-collector-config.yml
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    ports:
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP http receiver
+      #   - 1888:1888 # pprof extension
+      #   - 8888:8888 # Prometheus metrics exposed by the collector for itself
+      #   - 8889:8889 # Prometheus exporter metrics for applications
+      #   - 13133:13133 # health_check extension      
+      #   - 55679:55679 # zpages extension
+
+networks:
+  default:
+    name: otel-network
+    driver: bridge

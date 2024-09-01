@@ -1,41 +1,39 @@
+using System.Reflection;
 using MainSerivce.Data;
 using MainService;
+using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using Serilog;
-using Serilog.Sinks.OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
-const string outputTemplate =
-    "[{Level:w}]: {Timestamp:dd-MM-yyyy:HH:mm:ss} {MachineName} {EnvironmentName} {SourceContext} {Message}{NewLine}{Exception}";
-
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .Enrich.FromLogContext()
-    .Enrich.WithThreadId()
-    .Enrich.WithEnvironmentName()
-    .Enrich.WithMachineName()
-    .WriteTo.Console(outputTemplate: outputTemplate)
-    .WriteTo.OpenTelemetry(opts =>
-    {
-        opts.IncludedData = IncludedData.SpecRequiredResourceAttributes;
-        opts.ResourceAttributes = new Dictionary<string, object>
-        {
-            ["app"] = "web",
-            ["runtime"] = "dotnet",
-            ["service.name"] = "MainService"
-        };
-    })
-    .CreateLogger();
-
-builder.Host.UseSerilog();
-
 builder.Services.AddSingleton<Instrumentor>();
+
+builder.Services.ConfigureHttpClientDefaults(http =>
+    http.AddStandardResilienceHandler());
+
+builder.Logging.AddOpenTelemetry(logging =>
+{
+    logging.IncludeFormattedMessage = true;
+    logging.IncludeScopes = true;
+});
+
+void ConfigureResource(ResourceBuilder resource)
+{
+    var assembly = Assembly.GetExecutingAssembly().GetName();
+    var assemblyVersion = assembly.Version?.ToString() ?? "1.08";
+    resource.AddService(Instrumentor.ServiceName, serviceVersion: assemblyVersion)
+        .AddTelemetrySdk()
+        .AddAttributes(new Dictionary<string, object>
+        {
+            ["environment.name"] = builder.Environment.EnvironmentName,
+            ["app.group"] = "main"
+        });
+}
+
 builder.Services.AddOpenTelemetry()
-    .ConfigureResource(resource => resource
-        .AddService(Instrumentor.ServiceName))
+    .ConfigureResource(ConfigureResource)
     .WithTracing(tracerProviderBuilder =>
         tracerProviderBuilder
             .AddSource(Instrumentor.ServiceName)
@@ -51,22 +49,14 @@ builder.Services.AddOpenTelemetry()
                     return !ignore.Any(s => ctx.Request.Path.Value!.Contains(s));
                 };
             })
-            .AddHttpClientInstrumentation(opts =>
-            {
-                var ignore = new[] { "/loki/api" };
-
-                opts.FilterHttpRequestMessage = req =>
-                {
-                    return !ignore.Any(s => req.RequestUri!.ToString().Contains(s));
-                };
-            })
-            .AddOtlpExporter())
+            .AddHttpClientInstrumentation())
     .WithMetrics(metricsProviderBuilder =>
         metricsProviderBuilder
             .AddMeter(Instrumentor.ServiceName)
             .AddRuntimeInstrumentation()
             .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation().AddOtlpExporter());
+            .AddHttpClientInstrumentation())
+    .UseOtlpExporter();
 
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
@@ -81,8 +71,7 @@ var app = builder.Build();
 
 app.UseStaticFiles();
 
-app.UseRouting();
-app.UseSerilogRequestLogging();
+app.UseRouting(); 
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");
 
